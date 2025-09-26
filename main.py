@@ -116,6 +116,30 @@ Once you have them, send me a message in the following format:
 
 # --- Main Auto-Reply Bot Logic ---
 
+async def setup_user_session():
+    """Performs the one-time user authentication and saves the session string."""
+    print("Starting one-time user authentication...")
+    
+    config = load_config()
+    if not config:
+        print("Error: Configuration file not found. Cannot proceed with user authentication.")
+        sys.exit(1)
+
+    try:
+        # Create a client to handle the interactive login
+        user_client = Client(SESSION_NAME, api_id=config['api_id'], api_hash=config['api_hash'])
+
+        async with user_client:
+            # Let Pyrogram handle the interactive phone number login
+            print("Successfully authenticated. Exporting session string...")
+            session_string = await user_client.export_session_string()
+            save_config(config['api_id'], config['api_hash'], config['offline_message'], session_string)
+            print("Session string exported and saved successfully!")
+            
+    except Exception as e:
+        print(f"An error occurred during user authentication: {e}")
+        sys.exit(1)
+
 async def main():
     """Main function to run the auto-reply bot."""
     config = load_config()
@@ -133,17 +157,10 @@ async def main():
             # Terminal-based setup
             try:
                 api_id = int(api_id_str)
-                # Create a temporary client to validate credentials
-                test_client = Client("test_session", api_id=api_id, api_hash=api_hash)
-                async with test_client:
-                    pass  # Use the context manager to start and stop
+                # Save the config without session string and proceed to user login
                 save_config(api_id, api_hash, "I am currently offline and will get back to you as soon as possible. Thank you!")
-                
-                # Reload config after saving
-                config = load_config()
-                
-                print("Credentials saved. Starting the main bot...")
-                # The function will now proceed to start the main bot.
+                print("Credentials saved. Please re-run the script to start the user session setup.")
+                return
             except (ValueError, Exception) as e:
                 print(f"Invalid API ID or Hash provided. Please check and try again. ({e})")
                 sys.exit(1)
@@ -155,16 +172,16 @@ async def main():
                 print("Setup process finished. Please re-run the script to start the main bot.")
                 return
 
+    # Check if a session string exists for the user bot
+    if 'session_string' not in config or not config['session_string']:
+        print("User session not found. Starting one-time user authentication process...")
+        await setup_user_session()
+        print("User session created. Please re-run the script to start the main bot.")
+        return
+
     # Create and run the main auto-reply client
     try:
-        if 'session_string' in config and config['session_string']:
-            app = Client(SESSION_NAME, session_string=config['session_string'])
-        else:
-            app = Client(
-                SESSION_NAME,
-                api_id=config['api_id'],
-                api_hash=config['api_hash']
-            )
+        app = Client(SESSION_NAME, session_string=config['session_string'])
 
         @app.on_message(filters.command("editoff") & filters.me)
         async def edit_offline_message(client, message: Message):
@@ -194,12 +211,6 @@ async def main():
         print("Press Ctrl+C to stop the bot.")
         
         async with app:
-            # After successful start, export the session string if it doesn't exist
-            if not config.get('session_string'):
-                session_string = await app.export_session_string()
-                save_config(config['api_id'], config['api_hash'], config['offline_message'], session_string)
-                print("Session string exported and saved successfully!")
-            
             await app.idle()
 
     except Exception as e:
