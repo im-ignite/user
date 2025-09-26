@@ -44,7 +44,8 @@ def setup_with_bot_father():
 
     print("\nStarting the setup bot...")
     try:
-        setup_app = Client("setup_session", bot_token=bot_token, api_id=1, api_hash='a'*32)
+        # Initialize the client with just the session name and bot token
+        setup_app = Client("setup_session", bot_token=bot_token)
     except Exception as e:
         print(f"Error: Could not initialize setup client. Please check your bot token. ({e})")
         sys.exit(1)
