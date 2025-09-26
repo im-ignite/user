@@ -135,8 +135,8 @@ async def main():
                 api_id = int(api_id_str)
                 # Create a temporary client to validate credentials
                 test_client = Client("test_session", api_id=api_id, api_hash=api_hash)
-                await test_client.start()
-                await test_client.stop()
+                async with test_client:
+                    pass  # Use the context manager to start and stop
                 save_config(api_id, api_hash, "I am currently offline and will get back to you as soon as possible. Thank you!")
                 
                 # Reload config after saving
@@ -193,15 +193,14 @@ async def main():
         print("Telegram Auto-reply bot is starting...")
         print("Press Ctrl+C to stop the bot.")
         
-        await app.start()
-        # After successful start, export the session string if it doesn't exist
-        if not config.get('session_string'):
-            session_string = await app.export_session_string()
-            save_config(config['api_id'], config['api_hash'], config['offline_message'], session_string)
-            print("Session string exported and saved successfully!")
-
-        await app.idle()
-        await app.stop()
+        async with app:
+            # After successful start, export the session string if it doesn't exist
+            if not config.get('session_string'):
+                session_string = await app.export_session_string()
+                save_config(config['api_id'], config['api_hash'], config['offline_message'], session_string)
+                print("Session string exported and saved successfully!")
+            
+            await app.idle()
 
     except Exception as e:
         print(f"An error occurred while starting the main bot. Please check your configuration. ({e})")
