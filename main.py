@@ -13,7 +13,7 @@ CONFIG_FILE = 'config.json'
 
 # --- Configuration & Setup Logic ---
 
-async def save_config(api_id: int, api_hash: str, offline_message: str):
+def save_config(api_id: int, api_hash: str, offline_message: str):
     """Saves the API ID, API Hash, and offline message to a JSON file."""
     config = {
         'api_id': api_id,
@@ -24,7 +24,7 @@ async def save_config(api_id: int, api_hash: str, offline_message: str):
         json.dump(config, f, indent=4)
     print("Configuration saved successfully!")
 
-async def load_config():
+def load_config():
     """Loads the configuration from the JSON file."""
     if not os.path.exists(CONFIG_FILE):
         return None
@@ -33,7 +33,7 @@ async def load_config():
 
 # --- BotFather Bot for Initial Setup ---
 
-async def setup_with_bot_father():
+def setup_with_bot_father():
     """
     Guides the user through setting up the API credentials using a BotFather bot.
     """
@@ -62,11 +62,17 @@ Once you have them, send me a message in the following format:
 (e.g., `123456 0123456789abcdef0123456789abcdef`)
 """
 
+    @setup_app.on_message(filters.command("start"))
     async def start_handler(client, message: Message):
         await message.reply_text(setup_message, disable_web_page_preview=True)
 
+    @setup_app.on_message(filters.private)
     async def credential_handler(client, message: Message):
         try:
+            if message.text.startswith('/'):
+                # Ignore other commands
+                return
+
             parts = message.text.split()
             if len(parts) != 2:
                 await message.reply_text("Invalid format. Please send `API_ID API_HASH`.")
@@ -86,10 +92,12 @@ Once you have them, send me a message in the following format:
                 await message.reply_text("Invalid API ID or API Hash. Please check them and try again.")
                 return
 
-            await save_config(api_id, api_hash, "I am currently offline and will get back to you as soon as possible. Thank you!")
+            save_config(api_id, api_hash, "I am currently offline and will get back to you as soon as possible. Thank you!")
             await message.reply_text("Credentials saved successfully! The bot is now configured.")
             await message.reply_text("Please restart the main script to start your auto-reply bot.")
-            await client.stop()  # Stop the setup bot
+            
+            # The script will now exit gracefully
+            await client.stop()
             print("Setup complete. Please restart the script.")
             sys.exit(0)
 
@@ -98,22 +106,20 @@ Once you have them, send me a message in the following format:
         except Exception as e:
             await message.reply_text(f"An error occurred: {e}")
 
-    setup_app.add_handler(start_handler, filters.command("start") & filters.private)
-    setup_app.add_handler(credential_handler, filters.private)
     print("Please open your BotFather bot chat and send the /start command.")
     print("The setup bot is now waiting for your input...")
 
-    await setup_app.run()
+    setup_app.run()
 
 # --- Main Auto-Reply Bot Logic ---
 
-async def main():
+def main():
     """Main function to run the auto-reply bot."""
-    config = await load_config()
+    config = load_config()
 
     if not config:
         print("Bot is not yet configured. Starting the setup process...")
-        await setup_with_bot_father()
+        setup_with_bot_father()
         return
 
     # Create and run the main auto-reply client
@@ -130,7 +136,7 @@ async def main():
             try:
                 new_message = message.text.split(" ", 1)[1].strip()
                 config['offline_message'] = new_message
-                await save_config(config['api_id'], config['api_hash'], new_message)
+                save_config(config['api_id'], config['api_hash'], new_message)
                 await message.reply_text(f"Offline message updated successfully to: \n`{new_message}`")
             except IndexError:
                 await message.reply_text("Please provide a new message after the /editoff command.\nExample: `/editoff I will reply later.`")
@@ -150,10 +156,10 @@ async def main():
 
         print("Telegram Auto-reply bot is starting...")
         print("Press Ctrl+C to stop the bot.")
-        await app.run()
+        app.run()
 
     except Exception as e:
         print(f"An error occurred while starting the main bot. Please check your configuration. ({e})")
         
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
