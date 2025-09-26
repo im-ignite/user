@@ -211,7 +211,7 @@ async def main():
         print("Press Ctrl+C to stop the bot.")
         
         async with app:
-            await app.run()
+            await asyncio.run(app.idle())
 
     except Exception as e:
         print(f"An error occurred while starting the main bot. Please check your configuration. ({e})")
