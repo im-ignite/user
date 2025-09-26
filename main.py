@@ -1,0 +1,165 @@
+# This script creates a Telegram self-bot that replies when you're away.
+# The initial setup and remote control are handled via a separate BotFather bot.
+
+import os
+import sys
+import json
+import asyncio
+from pyrogram import Client, filters
+from pyrogram.errors import BotTokenInvalid, ApiIdInvalid
+from pyrogram.types import Message
+
+# File path for the configuration file
+CONFIG_FILE = 'config.json'
+
+# --- Configuration & Setup Logic ---
+
+async def save_config(api_id: int, api_hash: str, offline_message: str):
+    """Saves the API ID, API Hash, and offline message to a JSON file."""
+    config = {
+        'api_id': api_id,
+        'api_hash': api_hash,
+        'offline_message': offline_message
+    }
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump(config, f, indent=4)
+    print("Configuration saved successfully!")
+
+async def load_config():
+    """Loads the configuration from the JSON file."""
+    if not os.path.exists(CONFIG_FILE):
+        return None
+    with open(CONFIG_FILE, 'r') as f:
+        return json.load(f)
+
+# --- BotFather Bot for Initial Setup ---
+
+async def setup_with_bot_father():
+    """
+    Guides the user through setting up the API credentials using a BotFather bot.
+    """
+    bot_token = input("Enter your BotFather bot token: ")
+    if not bot_token:
+        print("Bot token cannot be empty. Exiting.")
+        sys.exit(1)
+
+    print("\nStarting the setup bot...")
+    try:
+        setup_app = Client("setup_session", bot_token=bot_token, api_id=1, api_hash='a'*32)
+    except (BotTokenInvalid, ApiIdInvalid) as e:
+        print(f"Error: Invalid bot token or dummy API credentials. Please check your token and try again. ({e})")
+        sys.exit(1)
+
+    setup_message = """
+**Welcome to the Setup Wizard!**
+
+I need your Telegram API credentials to run the auto-reply bot on your account.
+1. Go to **[my.telegram.org](https://my.telegram.org)**.
+2. Log in and click on "API Development Tools".
+3. Create a new application to get your API ID and API Hash.
+
+Once you have them, send me a message in the following format:
+`API_ID API_HASH`
+(e.g., `123456 0123456789abcdef0123456789abcdef`)
+"""
+
+    async def start_handler(client, message: Message):
+        await message.reply_text(setup_message, disable_web_page_preview=True)
+
+    async def credential_handler(client, message: Message):
+        try:
+            parts = message.text.split()
+            if len(parts) != 2:
+                await message.reply_text("Invalid format. Please send `API_ID API_HASH`.")
+                return
+
+            api_id_str, api_hash = parts
+            api_id = int(api_id_str)
+
+            # Validate credentials by trying to start a temporary client
+            await message.reply_text("Credentials received. Validating...")
+            test_client = Client("test_session", api_id=api_id, api_hash=api_hash)
+            try:
+                await test_client.start()
+                await test_client.stop()
+            except (ApiIdInvalid, asyncio.exceptions.TimeoutError):
+                await message.reply_text("Invalid API ID or API Hash. Please check them and try again.")
+                return
+            except Exception as e:
+                print(f"Test client failed with unknown error: {e}")
+                await message.reply_text("An unexpected error occurred. Please try again.")
+                return
+
+            await save_config(api_id, api_hash, "I am currently offline and will get back to you as soon as possible. Thank you!")
+            await message.reply_text("Credentials saved successfully! The bot is now configured.")
+            await message.reply_text("Please restart the main script to start your auto-reply bot.")
+            await client.stop()  # Stop the setup bot
+            print("Setup complete. Please restart the script.")
+            sys.exit(0)
+
+        except ValueError:
+            await message.reply_text("Invalid API ID. It must be a number.")
+        except Exception as e:
+            await message.reply_text(f"An error occurred: {e}")
+
+    setup_app.add_handler(start_handler, filters.command("start") & filters.private)
+    setup_app.add_handler(credential_handler, filters.private)
+    print("Please open your BotFather bot chat and send the /start command.")
+    print("The setup bot is now waiting for your input...")
+
+    await setup_app.run()
+
+# --- Main Auto-Reply Bot Logic ---
+
+async def main():
+    """Main function to run the auto-reply bot."""
+    config = await load_config()
+
+    if not config:
+        print("Bot is not yet configured. Starting the setup process...")
+        await setup_with_bot_father()
+        return
+
+    # Create and run the main auto-reply client
+    try:
+        app = Client(
+            "auto_reply_session",
+            api_id=config['api_id'],
+            api_hash=config['api_hash']
+        )
+
+        @app.on_message(filters.command("editoff") & filters.me)
+        async def edit_offline_message(client, message: Message):
+            """Handles the /editoff command to update the offline message."""
+            try:
+                new_message = message.text.split(" ", 1)[1].strip()
+                config['offline_message'] = new_message
+                await save_config(config['api_id'], config['api_hash'], new_message)
+                await message.reply_text(f"Offline message updated successfully to: \n`{new_message}`")
+            except IndexError:
+                await message.reply_text("Please provide a new message after the /editoff command.\nExample: `/editoff I will reply later.`")
+            except Exception as e:
+                await message.reply_text(f"An error occurred: {e}")
+
+        @app.on_message(filters.private & filters.incoming & ~filters.me)
+        async def auto_reply(client, message: Message):
+            """Automatically replies to incoming private messages."""
+            try:
+                current_message = config.get('offline_message', "I am currently offline.")
+                await asyncio.sleep(3)  # Small delay for natural response
+                await message.reply(current_message)
+                print(f"Replied to {message.from_user.first_name} with: '{current_message}'")
+            except Exception as e:
+                print(f"An error occurred: {e}")
+
+        print("Telegram Auto-reply bot is starting...")
+        print("Press Ctrl+C to stop the bot.")
+        await app.run()
+
+    except (BotTokenInvalid, ApiIdInvalid) as e:
+        print(f"Error: Invalid credentials in {CONFIG_FILE}. Please delete the file and restart the script to reconfigure. ({e})")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
