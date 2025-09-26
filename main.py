@@ -5,7 +5,7 @@ import os
 import sys
 import json
 import asyncio
-from pyrogram import Client, filters
+from pyrogram import Client, filters, idle
 from pyrogram.types import Message
 import getpass # Using getpass to hide sensitive input
 
@@ -211,7 +211,7 @@ async def main():
         print("Press Ctrl+C to stop the bot.")
         
         async with app:
-            await asyncio.run(app.idle())
+            await idle()
 
     except Exception as e:
         print(f"An error occurred while starting the main bot. Please check your configuration. ({e})")
