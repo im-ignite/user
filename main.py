@@ -6,7 +6,6 @@ import sys
 import json
 import asyncio
 from pyrogram import Client, filters
-from pyrogram.errors import BotTokenInvalid, ApiIdInvalid
 from pyrogram.types import Message
 
 # File path for the configuration file
@@ -46,8 +45,8 @@ async def setup_with_bot_father():
     print("\nStarting the setup bot...")
     try:
         setup_app = Client("setup_session", bot_token=bot_token, api_id=1, api_hash='a'*32)
-    except (BotTokenInvalid, ApiIdInvalid) as e:
-        print(f"Error: Invalid bot token or dummy API credentials. Please check your token and try again. ({e})")
+    except Exception as e:
+        print(f"Error: Could not initialize setup client. Please check your bot token. ({e})")
         sys.exit(1)
 
     setup_message = """
@@ -82,12 +81,9 @@ Once you have them, send me a message in the following format:
             try:
                 await test_client.start()
                 await test_client.stop()
-            except (ApiIdInvalid, asyncio.exceptions.TimeoutError):
-                await message.reply_text("Invalid API ID or API Hash. Please check them and try again.")
-                return
             except Exception as e:
                 print(f"Test client failed with unknown error: {e}")
-                await message.reply_text("An unexpected error occurred. Please try again.")
+                await message.reply_text("Invalid API ID or API Hash. Please check them and try again.")
                 return
 
             await save_config(api_id, api_hash, "I am currently offline and will get back to you as soon as possible. Thank you!")
@@ -156,10 +152,8 @@ async def main():
         print("Press Ctrl+C to stop the bot.")
         await app.run()
 
-    except (BotTokenInvalid, ApiIdInvalid) as e:
-        print(f"Error: Invalid credentials in {CONFIG_FILE}. Please delete the file and restart the script to reconfigure. ({e})")
     except Exception as e:
-        print(f"An error occurred: {e}")
-
+        print(f"An error occurred while starting the main bot. Please check your configuration. ({e})")
+        
 if __name__ == "__main__":
     asyncio.run(main())
