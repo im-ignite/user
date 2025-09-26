@@ -12,6 +12,11 @@ import getpass # Using getpass to hide sensitive input
 # File path for the configuration file
 CONFIG_FILE = 'config.json'
 
+# --- Custom Exception for Clean Exit ---
+class SetupCompleteError(Exception):
+    """Custom exception to signal that setup is complete and the script should exit."""
+    pass
+
 # --- Configuration & Setup Logic ---
 
 def save_config(api_id: int, api_hash: str, offline_message: str):
@@ -34,7 +39,7 @@ def load_config():
 
 # --- BotFather Bot for Initial Setup ---
 
-def setup_with_bot_father(bot_token, api_id, api_hash):
+async def setup_with_bot_father(bot_token, api_id, api_hash):
     """
     Guides the user through setting up the API credentials using a BotFather bot.
     """
@@ -94,9 +99,7 @@ Once you have them, send me a message in the following format:
             await message.reply_text("Please restart the main script to start your auto-reply bot.")
             
             # The script will now exit gracefully
-            await client.stop()
-            print("Setup complete. Please restart the script.")
-            sys.exit(0)
+            raise SetupCompleteError("Setup is complete. Exiting cleanly.")
 
         except ValueError:
             await message.reply_text("Invalid API ID. It must be a number.")
@@ -106,22 +109,45 @@ Once you have them, send me a message in the following format:
     print("Please open your BotFather bot chat and send the /start command.")
     print("The setup bot is now waiting for your input...")
 
-    setup_app.run()
+    async with setup_app:
+        await setup_app.idle()
 
 # --- Main Auto-Reply Bot Logic ---
 
-def main():
+async def main():
     """Main function to run the auto-reply bot."""
     config = load_config()
 
     if not config:
         print("Bot is not yet configured. Please provide initial credentials.")
         bot_token = input("Enter your BotFather bot token: ")
-        api_id = int(input("Enter your API ID from my.telegram.org: "))
-        api_hash = getpass.getpass("Enter your API Hash from my.telegram.org: ")
         
-        setup_with_bot_father(bot_token, api_id, api_hash)
-        return
+        # New interactive prompt for API credentials
+        print("\nNow, provide your Telegram API credentials. You can also press Enter to skip and set them up via the bot later.")
+        api_id_str = input("Enter your API ID from my.telegram.org (or press Enter): ")
+        api_hash = getpass.getpass("Enter your API Hash from my.telegram.org (or press Enter): ")
+        
+        if api_id_str and api_hash:
+            # Terminal-based setup
+            try:
+                api_id = int(api_id_str)
+                # Create a temporary client to validate credentials
+                test_client = Client("test_session", api_id=api_id, api_hash=api_hash)
+                await test_client.start()
+                await test_client.stop()
+                save_config(api_id, api_hash, "I am currently offline and will get back to you as soon as possible. Thank you!")
+                print("Credentials saved. Starting the main bot...")
+                # The function will now proceed to start the main bot.
+            except (ValueError, Exception) as e:
+                print(f"Invalid API ID or Hash provided. Please check and try again. ({e})")
+                sys.exit(1)
+        else:
+            # Bot-based setup
+            try:
+                await setup_with_bot_father(bot_token, api_id=0, api_hash='') # Dummy credentials
+            except SetupCompleteError:
+                print("Setup process finished. Please re-run the script to start the main bot.")
+                return
 
     # Create and run the main auto-reply client
     try:
@@ -157,10 +183,11 @@ def main():
 
         print("Telegram Auto-reply bot is starting...")
         print("Press Ctrl+C to stop the bot.")
-        app.run()
+        async with app:
+            await app.idle()
 
     except Exception as e:
         print(f"An error occurred while starting the main bot. Please check your configuration. ({e})")
         
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
