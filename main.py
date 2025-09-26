@@ -11,6 +11,7 @@ import getpass # Using getpass to hide sensitive input
 
 # File path for the configuration file
 CONFIG_FILE = 'config.json'
+SESSION_NAME = 'user_bot_session'
 
 # --- Custom Exception for Clean Exit ---
 class SetupCompleteError(Exception):
@@ -19,12 +20,13 @@ class SetupCompleteError(Exception):
 
 # --- Configuration & Setup Logic ---
 
-def save_config(api_id: int, api_hash: str, offline_message: str):
-    """Saves the API ID, API Hash, and offline message to a JSON file."""
+def save_config(api_id: int, api_hash: str, offline_message: str, session_string: str = None):
+    """Saves the API ID, API Hash, offline message, and session string to a JSON file."""
     config = {
         'api_id': api_id,
         'api_hash': api_hash,
-        'offline_message': offline_message
+        'offline_message': offline_message,
+        'session_string': session_string
     }
     with open(CONFIG_FILE, 'w') as f:
         json.dump(config, f, indent=4)
@@ -155,11 +157,14 @@ async def main():
 
     # Create and run the main auto-reply client
     try:
-        app = Client(
-            "auto_reply_session",
-            api_id=config['api_id'],
-            api_hash=config['api_hash']
-        )
+        if 'session_string' in config and config['session_string']:
+            app = Client(SESSION_NAME, session_string=config['session_string'])
+        else:
+            app = Client(
+                SESSION_NAME,
+                api_id=config['api_id'],
+                api_hash=config['api_hash']
+            )
 
         @app.on_message(filters.command("editoff") & filters.me)
         async def edit_offline_message(client, message: Message):
@@ -167,7 +172,7 @@ async def main():
             try:
                 new_message = message.text.split(" ", 1)[1].strip()
                 config['offline_message'] = new_message
-                save_config(config['api_id'], config['api_hash'], new_message)
+                save_config(config['api_id'], config['api_hash'], new_message, config.get('session_string'))
                 await message.reply_text(f"Offline message updated successfully to: \n`{new_message}`")
             except IndexError:
                 await message.reply_text("Please provide a new message after the /editoff command.\nExample: `/editoff I will reply later.`")
@@ -187,8 +192,16 @@ async def main():
 
         print("Telegram Auto-reply bot is starting...")
         print("Press Ctrl+C to stop the bot.")
-        async with app:
-            await app.idle()
+        
+        await app.start()
+        # After successful start, export the session string if it doesn't exist
+        if not config.get('session_string'):
+            session_string = await app.export_session_string()
+            save_config(config['api_id'], config['api_hash'], config['offline_message'], session_string)
+            print("Session string exported and saved successfully!")
+
+        await app.idle()
+        await app.stop()
 
     except Exception as e:
         print(f"An error occurred while starting the main bot. Please check your configuration. ({e})")
