@@ -7,6 +7,7 @@ import json
 import asyncio
 from pyrogram import Client, filters
 from pyrogram.types import Message
+import getpass # Using getpass to hide sensitive input
 
 # File path for the configuration file
 CONFIG_FILE = 'config.json'
@@ -33,21 +34,16 @@ def load_config():
 
 # --- BotFather Bot for Initial Setup ---
 
-def setup_with_bot_father():
+def setup_with_bot_father(bot_token, api_id, api_hash):
     """
     Guides the user through setting up the API credentials using a BotFather bot.
     """
-    bot_token = input("Enter your BotFather bot token: ")
-    if not bot_token:
-        print("Bot token cannot be empty. Exiting.")
-        sys.exit(1)
-
     print("\nStarting the setup bot...")
     try:
-        # Initialize the client with just the session name and bot token
-        setup_app = Client("setup_session", bot_token=bot_token)
+        # Initialize the client with provided credentials
+        setup_app = Client("setup_session", bot_token=bot_token, api_id=api_id, api_hash=api_hash)
     except Exception as e:
-        print(f"Error: Could not initialize setup client. Please check your bot token. ({e})")
+        print(f"Error: Could not initialize setup client. Please check your bot token, API ID, and API Hash. ({e})")
         sys.exit(1)
 
     setup_message = """
@@ -63,11 +59,11 @@ Once you have them, send me a message in the following format:
 (e.g., `123456 0123456789abcdef0123456789abcdef`)
 """
 
-    @setup_app.on_message(filters.command("start"))
+    @setup_app.on_message(filters.command("start") & filters.private)
     async def start_handler(client, message: Message):
         await message.reply_text(setup_message, disable_web_page_preview=True)
 
-    @setup_app.on_message(filters.private)
+    @setup_app.on_message(filters.private & ~filters.me)
     async def credential_handler(client, message: Message):
         try:
             if message.text.startswith('/'):
@@ -119,8 +115,12 @@ def main():
     config = load_config()
 
     if not config:
-        print("Bot is not yet configured. Starting the setup process...")
-        setup_with_bot_father()
+        print("Bot is not yet configured. Please provide initial credentials.")
+        bot_token = input("Enter your BotFather bot token: ")
+        api_id = int(input("Enter your API ID from my.telegram.org: "))
+        api_hash = getpass.getpass("Enter your API Hash from my.telegram.org: ")
+        
+        setup_with_bot_father(bot_token, api_id, api_hash)
         return
 
     # Create and run the main auto-reply client
