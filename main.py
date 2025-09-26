@@ -136,6 +136,12 @@ async def main():
                 await test_client.start()
                 await test_client.stop()
                 save_config(api_id, api_hash, "I am currently offline and will get back to you as soon as possible. Thank you!")
+                
+                # --- FIX: Reload config after saving ---
+                global config # Add this to modify the global variable
+                config = load_config()
+                # --- END FIX ---
+                
                 print("Credentials saved. Starting the main bot...")
                 # The function will now proceed to start the main bot.
             except (ValueError, Exception) as e:
