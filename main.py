@@ -112,7 +112,7 @@ Once you have them, send me a message in the following format:
     print("The setup bot is now waiting for your input...")
 
     async with setup_app:
-        await setup_app.idle()
+        await setup_app.run()
 
 # --- Main Auto-Reply Bot Logic ---
 
@@ -211,7 +211,7 @@ async def main():
         print("Press Ctrl+C to stop the bot.")
         
         async with app:
-            await app.idle()
+            await app.run()
 
     except Exception as e:
         print(f"An error occurred while starting the main bot. Please check your configuration. ({e})")
